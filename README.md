@@ -121,3 +121,16 @@ make cross     # linux/{amd64,arm64,armv7,riscv64} into dist/
 Releases are cut by tagging (`git tag v0.1.0 && git push --tags`) — the
 GitHub Actions workflow builds and publishes binaries for all
 architectures via goreleaser.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE) — in plain English:
+
+- **You can** download, use, study, modify, and share sysmon (and your
+  modified versions) freely, for any noncommercial purpose: personal use,
+  hobby projects, research, education, charities, public institutions.
+- **You cannot** sell sysmon, or sell anything built from it —
+  adaptations, extensions, forks, or products that incorporate it — or
+  otherwise use it for commercial purposes.
+
+If you redistribute it, keep the `Required Notice` and license with it.
