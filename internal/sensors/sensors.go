@@ -90,6 +90,7 @@ func NewManager() *Manager {
 		&Hwmon{},
 		&Thermal{},
 		&PowerSupply{},
+		&RAPL{},
 		&DRM{},
 		NewNvidiaSMI(),
 		&IIO{},

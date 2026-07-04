@@ -70,9 +70,24 @@ func (h *Hwmon) Read() []Reading {
 			chip = fmt.Sprintf("%s #%d", chip, n)
 		}
 
-		out = append(out, readHwmonChip(attrDir, chip)...)
+		readings := readHwmonChip(attrDir, chip)
+		// Idle USB-C PD ports (ucsi) mirror all-zero electrics into
+		// hwmon; the power_supply source already filters these.
+		if strings.HasPrefix(name, "ucsi") && allZero(readings) {
+			continue
+		}
+		out = append(out, readings...)
 	}
 	return out
+}
+
+func allZero(rs []Reading) bool {
+	for _, r := range rs {
+		if r.Value != 0 {
+			return false
+		}
+	}
+	return len(rs) > 0
 }
 
 func readHwmonChip(dir, chip string) []Reading {

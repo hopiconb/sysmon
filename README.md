@@ -26,6 +26,7 @@ automatically — including hotplugged USB devices:
 | `/sys/class/thermal` | ACPI & SoC thermal zones — the primary temp source on ARM/Snapdragon devices |
 | `/sys/class/power_supply` | Batteries (charge, wattage, temp), AC/USB-PD adapters, even wireless peripherals that report charge |
 | `/sys/class/drm` | GPU utilization + VRAM (amdgpu), GT frequency (Intel i915/xe) — any PCI GPU by vendor id |
+| `/sys/class/powercap` | Live CPU/platform power draw in watts via RAPL (Intel and AMD) — package, core, uncore, DRAM, and whole-system (`psys`) domains |
 | `/sys/bus/iio` | Environmental sensors: temperature, humidity, pressure, ambient light (tablets, ARM boards, USB dongles) |
 | `nvidia-smi` | Proprietary NVIDIA driver: utilization, temp, power, fan, VRAM (auto-detected, skipped if absent) |
 
@@ -35,6 +36,22 @@ sensor makes it appear live in the TUI; unplugging removes it.
 **SATA drive temps**: load the `drivetemp` kernel module (kernel ≥ 5.6):
 `modprobe drivetemp`, persist with `echo drivetemp | sudo tee /etc/modules-load.d/drivetemp.conf`.
 NVMe drives need nothing.
+
+**CPU power (RAPL)**: recent kernels restrict `energy_uj` to root
+(PLATYPUS mitigation). Grant read access once and sysmon picks it up
+automatically:
+
+```bash
+echo 'z /sys/class/powercap/intel-rapl:*/energy_uj 0444 - - -' | sudo tee /etc/tmpfiles.d/sysmon-rapl.conf
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/sysmon-rapl.conf
+```
+
+**Battery power reads 0 W?** That's correct on AC with a full battery —
+no current flows through the battery then; the machine is fed by the
+adapter. Unplug to see the real discharge rate, or unlock RAPL (above)
+for live CPU/platform watts that work on AC too. sysmon normalizes both
+battery gauge types (energy-based `power_now` and charge-based
+`current_now`, including negative-while-charging values).
 
 ## Install
 

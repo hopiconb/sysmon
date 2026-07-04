@@ -679,6 +679,9 @@ func (m Model) overviewView() string {
 	if line := gpuLine(m.latest.Sensors, m.width); line != "" {
 		hw = append(hw, headerStyle.Render("gpu   ")+line)
 	}
+	if line := kindLine(m.latest.Sensors, sensors.KindPower, 4, m.width); line != "" {
+		hw = append(hw, headerStyle.Render("power ")+line)
+	}
 	if line := kindLine(m.latest.Sensors, sensors.KindFan, 4, m.width); line != "" {
 		hw = append(hw, headerStyle.Render("fans  ")+line)
 	}
