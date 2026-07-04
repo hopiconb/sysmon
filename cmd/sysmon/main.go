@@ -203,7 +203,7 @@ func runTUI() error {
 		defer st.Close()
 	}
 
-	p := tea.NewProgram(tui.New(stream, st), tea.WithAltScreen())
+	p := tea.NewProgram(tui.New(stream, st), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err = p.Run()
 	return err
 }
