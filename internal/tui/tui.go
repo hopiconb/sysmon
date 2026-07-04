@@ -15,7 +15,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/guptarohit/asciigraph"
 
 	"github.com/hopiconb/sysmon/internal/collector"
 	"github.com/hopiconb/sysmon/internal/sensors"
@@ -87,10 +86,22 @@ type Model struct {
 	st     *store.Store // nil if the DB couldn't be opened
 
 	latest     collector.Sample
+	prevTS     time.Time
+	intervalS  float64 // estimated seconds between samples
 	cpuHist    []float64
 	memHist    []float64
+	netRx      []float64
+	netTx      []float64
+	diskR      []float64
+	diskW      []float64
 	procHist   map[string][]float64 // process name -> CPU history
 	sensorHist map[string][]float64 // Reading.Key() -> value history
+
+	// overview options
+	show                 map[string]bool // section id -> visible
+	paused               bool
+	window               int // samples shown in graphs
+	hostLine1, hostLine2 string
 
 	procTable   table.Model
 	sensorTable table.Model
@@ -130,6 +141,9 @@ func New(stream <-chan collector.Sample, st *store.Store) Model {
 		filterInput: ti,
 		logsTable:   newTable(logColumns(72), 12),
 	}
+	p := loadPrefs()
+	m.show, m.window = p.Show, p.Window
+	m.hostLine1, m.hostLine2 = hostSummary()
 
 	// Offline: preload graphs from history so the TUI is still useful.
 	if !m.live && st != nil {
@@ -270,7 +284,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case sampleMsg:
-		m.applySample(collector.Sample(msg))
+		if !m.paused {
+			m.applySample(collector.Sample(msg))
+		}
 		return m, m.waitForSample()
 
 	case streamClosedMsg:
@@ -305,10 +321,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// sampleInterval estimates seconds between samples for time-axis labels.
+func (m Model) sampleInterval() float64 {
+	if m.intervalS > 0 {
+		return m.intervalS
+	}
+	return 1
+}
+
 func (m *Model) applySample(sm collector.Sample) {
+	if !m.prevTS.IsZero() {
+		if dt := sm.Timestamp.Sub(m.prevTS).Seconds(); dt > 0 && dt < 60 {
+			m.intervalS = dt
+		}
+	}
+	m.prevTS = sm.Timestamp
+
 	m.latest = sm
 	m.cpuHist = push(m.cpuHist, sm.CPUPct)
 	m.memHist = push(m.memHist, sm.MemPct)
+	m.netRx = push(m.netRx, sm.NetRxKBs)
+	m.netTx = push(m.netTx, sm.NetTxKBs)
+	m.diskR = push(m.diskR, sm.DiskRKBs)
+	m.diskW = push(m.diskW, sm.DiskWKBs)
 
 	seen := map[string]bool{}
 	for _, p := range sm.Procs {
@@ -419,7 +454,45 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.queryLogs()
 		}
 	}
+	if m.tab == tabOverview {
+		return m.handleOverviewKey(msg.String())
+	}
 	return m.updateActiveTable(msg)
+}
+
+func (m Model) handleOverviewKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case " ":
+		m.paused = !m.paused
+		return m, nil
+	case "+", "=":
+		m.window = clampInt(m.window+30, 30, histLen)
+	case "-":
+		m.window = clampInt(m.window-30, 30, histLen)
+	default:
+		for _, s := range overviewSections {
+			if s.key == key {
+				m.show[s.id] = !m.show[s.id]
+				break
+			}
+		}
+	}
+	m.savePrefs()
+	return m, nil
+}
+
+func (m Model) savePrefs() {
+	prefs{Show: m.show, Window: m.window}.save()
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 func (m Model) updateActiveTable(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -455,6 +528,20 @@ func (m Model) handleClick(x, y int) (tea.Model, tea.Cmd) {
 		for _, z := range m.tabZones() {
 			if x >= z.x0 && x < z.x1 {
 				return m.switchTab(z.tab)
+			}
+		}
+		return m, nil
+	}
+
+	// Toggle chips on the overview.
+	if m.tab == tabOverview {
+		if y >= headerH && y < headerH+3 {
+			for _, z := range m.chipZones() {
+				if x >= z.x0 && x < z.x1 {
+					m.show[z.id] = !m.show[z.id]
+					m.savePrefs()
+					return m, nil
+				}
 			}
 		}
 		return m, nil
@@ -537,8 +624,19 @@ func (m Model) View() string {
 		b.WriteString(m.logsView())
 	}
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render(" tab/1-4/click: switch · wheel/↑↓: select · q: quit"))
+	b.WriteString(dimStyle.Render(m.footer()))
 	return b.String()
+}
+
+func (m Model) footer() string {
+	switch m.tab {
+	case tabOverview:
+		return " i/c/m/n/d/h/t: toggle sections · space: pause · +/-: zoom · tab/1-4: switch · q: quit"
+	case tabLogs:
+		return " /: filter · enter: apply · r: refresh · wheel/↑↓: scroll · tab/1-4: switch · q: quit"
+	default:
+		return " wheel/↑↓/click: select · tab/1-4: switch · q: quit"
+	}
 }
 
 // button renders a 3-row bordered button.
@@ -644,56 +742,6 @@ func (m Model) graphWidth() int {
 	return w
 }
 
-func plot(data []float64, width, height int) string {
-	if len(data) < 2 {
-		return dimStyle.Render("waiting for data…")
-	}
-	return asciigraph.Plot(data,
-		asciigraph.Height(height),
-		asciigraph.Width(width),
-		asciigraph.LowerBound(0),
-	)
-}
-
-func (m Model) overviewView() string {
-	gw, gh := m.graphWidth(), m.graphH()
-
-	cpuTitle := "CPU"
-	if len(m.cpuHist) > 0 {
-		cpuTitle = fmt.Sprintf("CPU  %.1f%%", m.cpuHist[len(m.cpuHist)-1])
-	}
-	cpuContent := plot(m.cpuHist, gw, gh)
-	if len(m.latest.PerCore) > 0 {
-		cpuContent += "\n" + headerStyle.Render("cores ") + coreBars(m.latest.PerCore)
-	}
-
-	memTitle := "Memory"
-	if len(m.memHist) > 0 {
-		memTitle = fmt.Sprintf("Memory  %.1f%%  ·  %.0f MB", m.memHist[len(m.memHist)-1], m.latest.MemUsedMB)
-	}
-
-	var hw []string
-	if line := kindLine(m.latest.Sensors, sensors.KindTemp, 6, m.width); line != "" {
-		hw = append(hw, headerStyle.Render("temps ")+line)
-	}
-	if line := gpuLine(m.latest.Sensors, m.width); line != "" {
-		hw = append(hw, headerStyle.Render("gpu   ")+line)
-	}
-	if line := kindLine(m.latest.Sensors, sensors.KindPower, 4, m.width); line != "" {
-		hw = append(hw, headerStyle.Render("power ")+line)
-	}
-	if line := kindLine(m.latest.Sensors, sensors.KindFan, 4, m.width); line != "" {
-		hw = append(hw, headerStyle.Render("fans  ")+line)
-	}
-	if len(hw) == 0 {
-		hw = append(hw, dimStyle.Render("no sensor data"))
-	}
-
-	return panel(cpuTitle, cpuContent, m.width, colBorder) + "\n" +
-		panel(memTitle, plot(m.memHist, gw, gh), m.width, colBorder) + "\n" +
-		panel("hardware", strings.Join(hw, "\n"), m.width, colBorder)
-}
-
 // coreBars renders per-core load as one compact block-character row.
 func coreBars(cores []float64) string {
 	blocks := []rune("▁▂▃▄▅▆▇█")
@@ -757,7 +805,7 @@ func (m Model) focusView() string {
 	rows := m.procTable.Rows()
 	if c := m.procTable.Cursor(); c >= 0 && c < len(rows) {
 		name := rows[c][0]
-		out += panel(name+" · CPU %", plot(m.procHist[name], m.graphWidth(), m.graphH()), m.width, colBorder)
+		out += panel(name+" · CPU %", plotColor(tail(m.procHist[name], m.window), m.graphWidth(), m.graphH(), graphCPU), m.width, colBorder)
 	} else {
 		out += panel("graph", dimStyle.Render("no tracked processes — add names to the focus list in config.yaml"), m.width, colBorder)
 	}
@@ -770,7 +818,7 @@ func (m Model) sensorsView() string {
 	rows := m.sensorTable.Rows()
 	if c := m.sensorTable.Cursor(); c >= 0 && c < len(rows) {
 		key := rows[c][0] + "/" + rows[c][1]
-		out += panel(key, plot(m.sensorHist[key], m.graphWidth(), m.graphH()), m.width, colBorder)
+		out += panel(key, plotColor(tail(m.sensorHist[key], m.window), m.graphWidth(), m.graphH(), graphMem), m.width, colBorder)
 	} else {
 		out += panel("graph", dimStyle.Render("no sensors detected — see README for kernel modules (e.g. drivetemp)"), m.width, colBorder)
 	}
