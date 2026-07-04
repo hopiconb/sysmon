@@ -36,7 +36,14 @@ var (
 	dimStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	warnStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	headerStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
+	logoWaveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	logoNameStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 )
+
+// brand is the one-line logo shown in the tab bar.
+func brand() string {
+	return logoWaveStyle.Render("▁▂▄█") + logoNameStyle.Render(" sysmon ") + dimStyle.Render("│")
+}
 
 type sampleMsg collector.Sample
 type streamClosedMsg struct{}
@@ -351,7 +358,7 @@ func (m Model) tabBar() string {
 			parts[i] = tabStyle.Render(n)
 		}
 	}
-	bar := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
+	bar := brand() + lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 	status := dimStyle.Render("  live")
 	if !m.live {
 		status = warnStyle.Render("  offline — history only (systemctl --user start sysmon)")

@@ -50,7 +50,15 @@ func main() {
 	}
 }
 
+const banner = "" +
+	"  ___ _   _ ___ _ __ ___   ___  _ __\n" +
+	" / __| | | / __| '_ ` _ \\ / _ \\| '_ \\\n" +
+	" \\__ \\ |_| \\__ \\ | | | | | (_) | | | |\n" +
+	" |___/\\__, |___/_| |_| |_|\\___/|_| |_|\n" +
+	"      |___/  ▁▂▄▆█▆▄▂▁  terminal system monitor\n"
+
 func usage() {
+	fmt.Fprint(os.Stderr, banner)
 	fmt.Fprintln(os.Stderr, `usage: sysmon <command>
 
   daemon [--detach]   run the collector (foreground; --detach forks into background)

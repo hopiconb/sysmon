@@ -1,4 +1,6 @@
-# sysmon
+<p align="center">
+  <img src="assets/logo.svg" width="520" alt="sysmon — terminal system monitor">
+</p>
 
 Background system-monitoring daemon + interactive TUI for Linux. The daemon
 samples CPU, memory, per-process stats, and **every hardware sensor the

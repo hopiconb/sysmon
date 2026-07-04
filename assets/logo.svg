@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 170" width="560" height="170" role="img" aria-label="sysmon — terminal system monitor">
+  <defs>
+    <linearGradient id="wave" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3fb4f6"/>
+      <stop offset="1" stop-color="#ff6ac1"/>
+    </linearGradient>
+  </defs>
+  <!-- terminal window -->
+  <rect x="2" y="2" width="556" height="166" rx="14" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
+  <circle cx="26" cy="26" r="6" fill="#ff5f56"/>
+  <circle cx="46" cy="26" r="6" fill="#ffbd2e"/>
+  <circle cx="66" cy="26" r="6" fill="#27c93f"/>
+  <!-- live graph -->
+  <polyline points="30,150 250,150" fill="none" stroke="#30363d" stroke-width="2"/>
+  <polyline points="30,122 62,122 76,98 92,132 108,66 124,142 142,104 166,116 186,84 210,124 232,96 250,108"
+            fill="none" stroke="url(#wave)" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="250" cy="108" r="6" fill="#ff6ac1">
+    <animate attributeName="opacity" values="1;0.25;1" dur="1.6s" repeatCount="indefinite"/>
+  </circle>
+  <!-- wordmark -->
+  <text x="278" y="106" font-family="ui-monospace, 'Cascadia Code', 'JetBrains Mono', Menlo, monospace"
+        font-size="50" font-weight="700" fill="#e6edf3"><tspan fill="#ff6ac1">❯</tspan> sysmon</text>
+  <text x="284" y="138" font-family="ui-monospace, 'Cascadia Code', 'JetBrains Mono', Menlo, monospace"
+        font-size="16" fill="#8b949e">terminal system monitor</text>
+</svg>
