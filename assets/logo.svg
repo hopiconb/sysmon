@@ -7,9 +7,12 @@
   </defs>
   <!-- terminal window -->
   <rect x="2" y="2" width="556" height="166" rx="14" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
-  <circle cx="26" cy="26" r="6" fill="#ff5f56"/>
-  <circle cx="46" cy="26" r="6" fill="#ffbd2e"/>
-  <circle cx="66" cy="26" r="6" fill="#27c93f"/>
+  <!-- window buttons, KDE Breeze style: minimize, maximize, close -->
+  <g stroke="#9aa4af" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="478,23 484,29 490,23"/>
+    <path d="M 513 19 L 520 26 L 513 33 L 506 26 Z"/>
+    <path d="M 532 20 L 544 32 M 544 20 L 532 32"/>
+  </g>
   <!-- live graph -->
   <polyline points="30,150 250,150" fill="none" stroke="#30363d" stroke-width="2"/>
   <polyline points="30,122 62,122 76,98 92,132 108,66 124,142 142,104 166,116 186,84 210,124 232,96 250,108"
