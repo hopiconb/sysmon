@@ -1,0 +1,10 @@
+[Unit]
+Description=sysmon background collector
+
+[Service]
+ExecStart=%h/.local/bin/sysmon daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

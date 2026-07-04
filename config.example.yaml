@@ -1,0 +1,13 @@
+# Copy to ~/.config/sysmon/config.yaml — the daemon hot-reloads edits.
+
+# Process names to track (case-insensitive substring match).
+# Empty/omitted = track the top 10 processes by CPU instead.
+focus:
+  - firefox
+  - godot4
+  - go
+
+sample_interval_ms: 1000
+
+# Delete history older than this many days (0 = default of 7, -1 = keep forever).
+retention_days: 7

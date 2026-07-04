@@ -1,0 +1,5 @@
+/sysmon
+/dist/
+*.db
+*.db-wal
+*.db-shm
