@@ -136,6 +136,88 @@ func (s *Store) RecentSystem(n int) ([]SystemRow, error) {
 	return out, rows.Err()
 }
 
+// span returns the query start time and bucket width (both unix seconds)
+// for a range of `since` (0 = everything) downsampled to ~buckets points.
+func (s *Store) span(since time.Duration, buckets int) (start, bucket int64) {
+	now := time.Now().Unix()
+	if since > 0 {
+		start = now - int64(since.Seconds())
+	} else {
+		// All-time: find the oldest sample.
+		if err := s.db.QueryRow(`SELECT COALESCE(MIN(ts), ?) FROM samples`, now).Scan(&start); err != nil {
+			start = now
+		}
+	}
+	if buckets < 10 {
+		buckets = 10
+	}
+	bucket = (now - start) / int64(buckets)
+	if bucket < 1 {
+		bucket = 1
+	}
+	return start, bucket
+}
+
+func (s *Store) series(query string, args ...any) ([]float64, error) {
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []float64
+	for rows.Next() {
+		var b int64
+		var v float64
+		if err := rows.Scan(&b, &v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// SystemSeries returns a downsampled series of a system metric
+// (cpu | mem | temp) over the range, oldest first.
+func (s *Store) SystemSeries(metric string, since time.Duration, buckets int) ([]float64, error) {
+	switch metric {
+	case "cpu", "mem", "temp":
+	default:
+		return nil, fmt.Errorf("unknown system metric %q", metric)
+	}
+	start, bucket := s.span(since, buckets)
+	return s.series(
+		`SELECT (ts/?)*? AS b, AVG(`+metric+`) FROM samples
+		 WHERE ts >= ? GROUP BY b ORDER BY b`,
+		bucket, bucket, start)
+}
+
+// ProcSeries returns a downsampled series for processes whose name
+// matches (substring): total CPU %% or total memory MB across matching
+// PIDs, summed per sample then averaged per bucket.
+func (s *Store) ProcSeries(name, metric string, since time.Duration, buckets int) ([]float64, error) {
+	col := "cpu"
+	if metric == "mem" {
+		col = "mem_mb"
+	}
+	start, bucket := s.span(since, buckets)
+	return s.series(
+		`SELECT (ts/?)*? AS b, AVG(total) FROM
+		   (SELECT ts, SUM(`+col+`) AS total FROM proc_samples
+		    WHERE name LIKE ? AND ts >= ? GROUP BY ts)
+		 GROUP BY b ORDER BY b`,
+		bucket, bucket, "%"+name+"%", start)
+}
+
+// SensorSeries returns a downsampled series for one sensor, matched by
+// substring on "chip/label".
+func (s *Store) SensorSeries(key string, since time.Duration, buckets int) ([]float64, error) {
+	start, bucket := s.span(since, buckets)
+	return s.series(
+		`SELECT (ts/?)*? AS b, AVG(value) FROM sensor_samples
+		 WHERE (chip || '/' || label) LIKE ? AND ts >= ? GROUP BY b ORDER BY b`,
+		bucket, bucket, "%"+key+"%", start)
+}
+
 // ProcFilter narrows QueryProcs. Zero values mean "no constraint".
 type ProcFilter struct {
 	Name   string        // substring match on process name

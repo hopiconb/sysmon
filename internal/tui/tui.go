@@ -109,6 +109,14 @@ type Model struct {
 	filterInput textinput.Model
 	logsTable   table.Model
 	logsErr     string
+
+	// logs tab: charts sub-page
+	logsPage   int
+	chartInput textinput.Model
+	chartRange int
+	chartNorm  bool
+	chartData  []chartSeries
+	chartErr   string
 }
 
 func newTable(cols []table.Column, height int) table.Model {
@@ -141,6 +149,13 @@ func New(stream <-chan collector.Sample, st *store.Store) Model {
 		filterInput: ti,
 		logsTable:   newTable(logColumns(72), 12),
 	}
+	ci := textinput.New()
+	ci.Placeholder = `series: cpu, mem, temp, <process>, mem:<process>, sensor:<chip>`
+	ci.CharLimit = 120
+	ci.SetValue("cpu, mem")
+	m.chartInput = ci
+	m.chartRange = 2 // 1h
+
 	p := loadPrefs()
 	m.show, m.window = p.Show, p.Window
 	m.hostLine1, m.hostLine2 = hostSummary()
@@ -233,7 +248,7 @@ const headerH = 3 // bordered tab buttons
 // tab's table: header + panel border + table header row.
 func (m Model) tableTop() int {
 	if m.tab == tabLogs {
-		return headerH + 3 + 2 // filter panel, then results panel chrome
+		return headerH + 3 + 3 + 2 // subtabs, filter panel, results chrome
 	}
 	return headerH + 2
 }
@@ -258,7 +273,7 @@ func (m Model) tableH() int {
 }
 
 func (m Model) logsH() int {
-	h := m.height - headerH - 3 - 3
+	h := m.height - headerH - 3 - 3 - 3 - 1
 	if h < 4 {
 		h = 4
 	}
@@ -274,6 +289,7 @@ func (m *Model) resize() {
 	m.sensorTable.SetHeight(m.tableH())
 	m.logsTable.SetHeight(m.logsH())
 	m.filterInput.Width = m.width - 12
+	m.chartInput.Width = m.width - 12
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -291,6 +307,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamClosedMsg:
 		m.live = false
+		return m, nil
+
+	case chartMsg:
+		if msg.err != nil {
+			m.chartErr = msg.err.Error()
+		} else {
+			m.chartErr = ""
+			m.chartData = msg.series
+		}
 		return m, nil
 
 	case logsResultMsg:
@@ -434,6 +459,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filterInput, cmd = m.filterInput.Update(msg)
 		return m, cmd
 	}
+	if m.tab == tabLogs {
+		if nm, cmd, handled := m.handleLogsKey(msg); handled {
+			return nm, cmd
+		}
+	}
 
 	switch msg.String() {
 	case "q", "ctrl+c":
@@ -547,13 +577,9 @@ func (m Model) handleClick(x, y int) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// The filter box on the logs tab.
-	if m.tab == tabLogs && y >= headerH && y < headerH+3 {
-		m.filterInput.Focus()
-		return m, textinput.Blink
-	}
-	if m.filterInput.Focused() {
-		m.filterInput.Blur()
+	// The logs tab has its own sub-pages with dedicated click zones.
+	if m.tab == tabLogs {
+		return m.handleLogsClick(x, y)
 	}
 
 	// Row selection in the active table.
@@ -633,7 +659,10 @@ func (m Model) footer() string {
 	case tabOverview:
 		return " i/c/m/n/d/h/t: toggle sections · space: pause · +/-: zoom · tab/1-4: switch · q: quit"
 	case tabLogs:
-		return " /: filter · enter: apply · r: refresh · wheel/↑↓: scroll · tab/1-4: switch · q: quit"
+		if m.logsPage == logsPageCharts {
+			return " v: page · /: series · enter: plot · w: range · x: normalize · r: refresh · q: quit"
+		}
+		return " v: page · /: filter · enter: apply · r: refresh · wheel/↑↓: scroll · q: quit"
 	default:
 		return " wheel/↑↓/click: select · tab/1-4: switch · q: quit"
 	}
@@ -822,25 +851,6 @@ func (m Model) sensorsView() string {
 	} else {
 		out += panel("graph", dimStyle.Render("no sensors detected — see README for kernel modules (e.g. drivetemp)"), m.width, colBorder)
 	}
-	return out
-}
-
-func (m Model) logsView() string {
-	fcolor := colBorder
-	if m.filterInput.Focused() {
-		fcolor = colAccent
-	}
-	out := panel("filter — /: edit · enter: apply · r: refresh", m.filterInput.View(), m.width, fcolor) + "\n"
-
-	if m.logsErr != "" {
-		out += panel("history", errTextStyle.Render("query error: "+m.logsErr), m.width, colErr)
-		return out
-	}
-	tcolor := colBorder
-	if !m.filterInput.Focused() {
-		tcolor = colAccent
-	}
-	out += panel("history", m.logsTable.View(), m.width, tcolor)
 	return out
 }
 
