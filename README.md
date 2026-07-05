@@ -92,23 +92,39 @@ sysmon tail     # print live samples as JSON lines (pipe into jq etc.)
 sysmon daemon   # run the collector in the foreground
 ```
 
-### TUI keys
+### TUI
+
+Four tabs — overview, focus, sensors, logs — all fully mouse-operable
+(click tabs/chips/rows, wheel to scroll) as well as keyboard-driven.
+The header shows a tri-state health dot: green live, orange degraded
+(e.g. offline, history only), red broken. Info a device doesn't provide
+is marked `NG (not given)` rather than hidden.
 
 | Key | Action |
 |---|---|
-| `tab` / `shift+tab` | switch tabs (overview / focus / sensors / logs) |
-| `↑` `↓` | select a process/sensor to graph, or scroll logs |
-| `/` | edit the logs filter, `enter` applies, `esc` cancels |
-| `r` | re-run the logs query |
+| `tab` / `1`–`4` / click | switch tabs |
+| `↑` `↓` / wheel / click | select a process/sensor to graph, or scroll |
 | `q` / `ctrl+c` | quit the TUI (daemon unaffected) |
 
-### Logs filter syntax
+**Overview** — seven toggleable sections (system, cpu, memory, network,
+disk i/o, hardware, top processes); choices persist across restarts.
 
-Free text in one line, e.g. `firefox cpu>20 1h`:
+| Key | Action |
+|---|---|
+| `i c m n d h t` / click chip | show/hide a section |
+| `space` | pause the graphs |
+| `+` / `-` | zoom the graph time window |
 
-- plain words — substring match on process name
-- `cpu>N` — only rows with CPU ≥ N%
-- a duration (`15m`, `2h`) — only rows newer than that
+**Logs** — two sub-pages (`v` or click to switch):
+
+- *records*: filterable history table. Filter is free text, e.g.
+  `firefox cpu>20 1h` — words match process names, `cpu>N` sets a CPU
+  threshold, a duration (`15m`, `2h`) sets the time range.
+- *charts*: graph any stored range (`5m` … `7d`, `all`) and overlay up
+  to six series for comparison — `cpu`, `mem`, `temp`, a process name
+  (total CPU across its PIDs), `mem:<process>`, `sensor:<chip>`.
+  `w` cycles the range, `x` normalizes series to %% of their own max
+  so different units can be compared by shape, `r` refreshes.
 
 ## Config
 
