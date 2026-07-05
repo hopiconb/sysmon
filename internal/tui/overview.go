@@ -85,16 +85,29 @@ func (p prefs) save() {
 // ── static system identity (read once; works offline too) ──────────────
 
 func hostSummary() (string, string) {
-	line1, line2 := "unknown host", ""
+	line1, line2 := "", ""
 	if hi, err := host.Info(); err == nil {
 		line1 = fmt.Sprintf("%s  ·  %s %s  ·  kernel %s",
-			hi.Hostname, hi.Platform, hi.PlatformVersion, hi.KernelVersion)
+			orNGv(hi.Hostname), orNGv(hi.Platform), hi.PlatformVersion, orNGv(hi.KernelVersion))
 	}
 	if cis, err := cpu.Info(); err == nil && len(cis) > 0 {
+		model := strings.TrimSpace(cis[0].ModelName)
 		threads, _ := cpu.Counts(true)
-		line2 = fmt.Sprintf("%s  ·  %d threads", strings.TrimSpace(cis[0].ModelName), threads)
+		if threads > 0 {
+			line2 = fmt.Sprintf("%s  ·  %d threads", orNGv(model), threads)
+		} else {
+			line2 = orNGv(model)
+		}
 	}
-	return line1, line2
+	return orNG(line1), orNG(line2)
+}
+
+// orNGv is orNG for plain values embedded mid-line.
+func orNGv(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "NG"
+	}
+	return s
 }
 
 // ── the overview view ───────────────────────────────────────────────────
@@ -214,12 +227,17 @@ func (m Model) chipZones() []chipZone {
 }
 
 func (m Model) sysPanel(width int) string {
-	up := "—"
+	up, load, procs := "NG", "NG", "NG"
 	if m.latest.UptimeSec > 0 {
 		up = humanDur(m.latest.UptimeSec)
 	}
-	dyn := fmt.Sprintf("up %s  ·  load %.2f %.2f %.2f  ·  %d processes",
-		up, m.latest.Load1, m.latest.Load5, m.latest.Load15, m.latest.NumProcs)
+	if m.latest.Load1 > 0 || m.latest.Load5 > 0 || m.latest.Load15 > 0 {
+		load = fmt.Sprintf("%.2f %.2f %.2f", m.latest.Load1, m.latest.Load5, m.latest.Load15)
+	}
+	if m.latest.NumProcs > 0 {
+		procs = fmt.Sprint(m.latest.NumProcs)
+	}
+	dyn := fmt.Sprintf("up %s  ·  load %s  ·  %s processes", up, load, procs)
 	content := m.hostLine1 + "\n" + m.hostLine2 + "\n" + dyn
 	return panel("system", content, width, colBorder)
 }
@@ -243,7 +261,7 @@ func (m Model) memPanel(width, gw, gh int) string {
 	title := "memory"
 	if len(view) > 0 {
 		title = fmt.Sprintf("memory  %.1f%%  ·  %s / %s", view[len(view)-1],
-			humanMB(m.latest.MemUsedMB), humanMB(m.latest.MemTotalMB))
+			mbOrNG(m.latest.MemUsedMB), mbOrNG(m.latest.MemTotalMB))
 		if m.latest.SwapUsedMB > 0.5 {
 			title += fmt.Sprintf("  ·  swap %s", humanMB(m.latest.SwapUsedMB))
 		}
@@ -275,22 +293,23 @@ func (m Model) ratePanel(name string, a, b []float64, la, lb string, width, gw, 
 	return panel(title, content+"\n"+legend, width, colBorder)
 }
 
+// ng marks information the hardware does not provide, so an absent
+// category reads as explicitly "not given" rather than silently missing.
+var ng = dimStyle.Render("NG (not given)")
+
+func orNG(line string) string {
+	if line == "" {
+		return ng
+	}
+	return line
+}
+
 func (m Model) hwPanel() string {
-	var hw []string
-	if line := kindLine(m.latest.Sensors, sensors.KindTemp, 6, m.width); line != "" {
-		hw = append(hw, headerStyle.Render("temps ")+line)
-	}
-	if line := gpuLine(m.latest.Sensors, m.width); line != "" {
-		hw = append(hw, headerStyle.Render("gpu   ")+line)
-	}
-	if line := kindLine(m.latest.Sensors, sensors.KindPower, 4, m.width); line != "" {
-		hw = append(hw, headerStyle.Render("power ")+line)
-	}
-	if line := kindLine(m.latest.Sensors, sensors.KindFan, 4, m.width); line != "" {
-		hw = append(hw, headerStyle.Render("fans  ")+line)
-	}
-	if len(hw) == 0 {
-		hw = append(hw, dimStyle.Render("no sensor data"))
+	hw := []string{
+		headerStyle.Render("temps ") + orNG(kindLine(m.latest.Sensors, sensors.KindTemp, 6, m.width)),
+		headerStyle.Render("gpu   ") + orNG(gpuLine(m.latest.Sensors, m.width)),
+		headerStyle.Render("power ") + orNG(kindLine(m.latest.Sensors, sensors.KindPower, 4, m.width)),
+		headerStyle.Render("fans  ") + orNG(kindLine(m.latest.Sensors, sensors.KindFan, 4, m.width)),
 	}
 	return panel("hardware", strings.Join(hw, "\n"), m.width, colBorder)
 }
@@ -363,6 +382,13 @@ func (m Model) windowLabel() string {
 		return fmt.Sprintf("%.0fm", secs/60)
 	}
 	return fmt.Sprintf("%.0fs", secs)
+}
+
+func mbOrNG(mb float64) string {
+	if mb <= 0 {
+		return "NG"
+	}
+	return humanMB(mb)
 }
 
 func humanMB(mb float64) string {

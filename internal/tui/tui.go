@@ -789,10 +789,12 @@ func coreBars(cores []float64) string {
 }
 
 // kindLine summarizes the top-n hottest/highest readings of one kind.
+// Zero is a real reading for power and fans (no draw, fan stopped) but
+// bogus for temperatures, so only temps filter it out.
 func kindLine(rs []sensors.Reading, kind sensors.Kind, n, width int) string {
 	var of []sensors.Reading
 	for _, r := range rs {
-		if r.Kind == kind && r.Value > 0 {
+		if r.Kind == kind && (r.Value > 0 || kind != sensors.KindTemp) {
 			of = append(of, r)
 		}
 	}
@@ -810,13 +812,25 @@ func kindLine(rs []sensors.Reading, kind sensors.Kind, n, width int) string {
 	return clip(strings.Join(parts, "  ·  "), width)
 }
 
-// gpuLine shows utilization/VRAM for every detected GPU.
+// gpuLine shows utilization/VRAM for every detected GPU, falling back
+// to whatever the driver does expose (e.g. Intel iGPUs only give the
+// current frequency).
 func gpuLine(rs []sensors.Reading, width int) string {
-	var parts []string
+	var parts, fallback []string
 	for _, r := range rs {
-		if strings.HasPrefix(r.Chip, "gpu/") && (r.Label == "busy" || r.Label == "vram") {
-			parts = append(parts, fmt.Sprintf("%s %s %.0f%%", strings.TrimPrefix(r.Chip, "gpu/"), r.Label, r.Value))
+		if !strings.HasPrefix(r.Chip, "gpu/") {
+			continue
 		}
+		name := strings.TrimPrefix(r.Chip, "gpu/")
+		switch {
+		case r.Label == "busy" || r.Label == "vram":
+			parts = append(parts, fmt.Sprintf("%s %s %.0f%%", name, r.Label, r.Value))
+		case r.Kind == sensors.KindFreq:
+			fallback = append(fallback, fmt.Sprintf("%s %s %.0f MHz", name, r.Label, r.Value))
+		}
+	}
+	if len(parts) == 0 {
+		parts = fallback
 	}
 	return clip(strings.Join(parts, "  ·  "), width)
 }
